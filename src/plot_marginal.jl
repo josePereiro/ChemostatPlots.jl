@@ -2,34 +2,51 @@ const EP_COLOR = :red
 const FBA_COLOR = :blue
 const HR_COLOR = :black
 
-function plot_marginal!(p, μ::Real, σ::Real, lb::Real, ub::Real;
-    av = nothing, h = 1, lw = 5, color = :black,
-    label = "", normalize = false, kwargs...
-)
+## ----------------------------------------------------------------------------------
+ϕ(x, μ, σ) = inv(σ*sqrt(2π))*exp(-((x - μ)^2)/(2σ^2))
+_unbig(x) = round(Float64(x); digits = 15)
+function _trunc_samples(μ, σ, lb, ub; xbins = 1000)
     
-    sσ = sqrt(σ)
-    tN = Truncated(Normal(μ, sσ), lb, ub) 
-    global_max_ = isnothing(av) ? clamp(μ, lb, ub) : av
-    margin_ = abs(ub - lb) * 0.1
-    if sσ == 0.0 || isinf(pdf(tN, global_max_))
-        # delta
-        plot!(p, [lb - margin_, ub + margin_], [0.0, 0.0]; label = "")
-        plot!(p, [global_max_, global_max_], [0.0, h]; 
-            lw, label, color, kwargs...
-        )
-    else
-        # normal
-        xs = range(lb, ub; length = 1000)
-        ys = [pdf(tN, x) for x in xs]
-        ys .= !normalize ? ys ./ maximum(ys) : ys
-        plot!(p, xs, ys;
-            xlim = [lb - margin_, ub + margin_],
-            lw, label, color, kwargs...
-        )
+    local_max = clamp(μ, lb, ub)
+    max_range = max(abs(local_max - lb), abs(local_max - ub))
+    log_range = range(log10(max_range), log10(σ/xbins), length = div(xbins, 2))
+    xs = [
+        local_max .- 10.0.^(log_range);
+        local_max;
+        local_max .+ 10.0.^(reverse(log_range))
+    ] 
+    Txs = [big(x) for x in xs if lb <= x <= ub]
+    Tpdf = ϕ.(Txs, μ, σ)
+    Z = sum(@view(Tpdf[1:end - 1]) .* diff(Txs))
+    Tpdf .= Tpdf ./ Z
+    _unbig.(Txs), _unbig.(Tpdf)
+end
+
+## ----------------------------------------------------------------------------------
+function plot_marginal!(p, μ::Real, σ::Real, lb::Real, ub::Real;
+        av = nothing, h = 1, lw = 5, color = :black, xbins = 1000,
+        label = "", normalize = false, kwargs...
+    )
+    σ = σ < 1e-25 ? 1e-25 : σ
+
+    xs, ys = _trunc_samples(μ, σ, lb, ub; xbins)
+    nans = findfirst(isnan, ys)
+    if !isnothing(nans)
+        
+        global_max_ = isnothing(av) ? clamp(μ, lb, ub) : av
+        xs, ys = _trunc_samples(global_max_, σ, lb, ub; xbins)
     end
+    
+    margin_ = abs(ub - lb) * 0.1
+    ys .= !normalize ? ys ./ maximum(ys) : ys
+    plot!(p, xs, ys;
+        xlim = [lb - margin_, ub + margin_],
+        lw, label, color, kwargs...
+    )
     return plot!(p; kwargs...)
 end
 
+## ----------------------------------------------------------------------------------
 # Single out
 function plot_marginal!(p, metnet::ChU.MetNet, out::Union{ChU.FBAout, ChU.EPout}, ider; 
         color = out isa ChU.FBAout ? FBA_COLOR : EP_COLOR,
@@ -42,7 +59,7 @@ function plot_marginal!(p, metnet::ChU.MetNet, out::Union{ChU.FBAout, ChU.EPout}
 
     μ_ = ChU.μ(metnet, out, ider);
     av_ = ChU.av(metnet, out, ider);
-    σ_ = ChU.σ(metnet, out, ider);
+    σ_ = sqrt(ChU.σ(metnet, out, ider));
     plot_marginal!(p, μ_, σ_, lb_, ub_; av = av_, color, label, kwargs...)
 end
 
@@ -70,3 +87,6 @@ function plot_marginal!(p, metnet::ChU.MetNet, outs::Vector, ider::ChU.IDER_TYPE
     end
     return p
 end
+
+## ----------------------------------------------------------------------------------
+plot_marginal(args...; kwargs...) = plot_marginal!(plot(), args...; kwargs...)
