@@ -24,8 +24,8 @@ end
 
 ## ----------------------------------------------------------------------------------
 function plot_marginal!(p, μ::Real, σ::Real, lb::Real, ub::Real;
-        av = nothing, h = 1, lw = 5, color = :black, xbins = 1000,
-        label = "", normalize = false, kwargs...
+        av = nothing, lw = 5, color = :black, xbins = 1000,
+        label = "", normalize = true, kwargs...
     )
     σ = σ < 1e-25 ? 1e-25 : σ
 
@@ -38,7 +38,7 @@ function plot_marginal!(p, μ::Real, σ::Real, lb::Real, ub::Real;
     end
     
     margin_ = abs(ub - lb) * 0.1
-    ys .= !normalize ? ys ./ maximum(ys) : ys
+    ys = normalize ? ys ./ maximum(ys) : ys
     plot!(p, xs, ys;
         xlim = [lb - margin_, ub + margin_],
         lw, label, color, kwargs...
@@ -66,8 +66,8 @@ end
 
 # TODO: add normalization option
 function plot_marginal!(p, metnet::ChU.MetNet, out::ChU.HRout, ider; 
-        h = :ignored, color = HR_COLOR, 
-        label = ChU.rxns(metnet, ider), kwargs...)
+        color = HR_COLOR, label = ChU.rxns(metnet, ider), kwargs...
+    )
 
     lb_ = ChU.lb(metnet, ider)
     ub_ = ChU.ub(metnet, ider)
@@ -79,11 +79,11 @@ function plot_marginal!(p, metnet::ChU.MetNet, out::ChU.HRout, ider;
     )
 end
 
-function plot_marginal!(p, metnet::ChU.MetNet, outs::Vector, ider::ChU.IDER_TYPE; kwargs...)
-    pdf_maxval_ = ChU.pdf_maxval(metnet, outs, ider)
-    pdf_maxval_ = pdf_maxval_ != -1 ? pdf_maxval_ : 1
+function plot_marginal!(p, metnet::ChU.MetNet, outs::Vector, ider::ChU.IDER_TYPE; 
+        kwargs...
+    )
     for out in outs
-        plot_marginal!(p, metnet, out, ider; h = pdf_maxval_ * 1.1, kwargs...)
+        plot_marginal!(p, metnet, out, ider; kwargs...)
     end
     return p
 end
